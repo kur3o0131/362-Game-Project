@@ -77,6 +77,28 @@ public class PlayerStats : MonoBehaviour
         currentHealth = Mathf.Max(currentHealth, 0);
         if (currentHealth <= 0)
             Die();
+
+        // Update UI if it exists
+        var healthUI = FindFirstObjectByType<PlayerHealthUI>();
+        if (healthUI != null)
+            healthUI.UpdateHealthUI();
+    }
+
+    public void Heal(int amount)
+    {
+        currentHealth = Mathf.Min(currentHealth + amount, maxHealth);
+
+        var healthUI = FindFirstObjectByType<PlayerHealthUI>();
+        if (healthUI != null)
+            healthUI.UpdateHealthUI();
+
+        Debug.Log($"{gameObject.name} healed by {amount}. Current HP: {currentHealth}");
+    }
+
+    public void IncreaseAttack(int amount)
+    {
+        attackPower += amount;
+        Debug.Log($"{gameObject.name} attack buffed by {amount}. New ATK: {attackPower}");
     }
 
     private void Die()
