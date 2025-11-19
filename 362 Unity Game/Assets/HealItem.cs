@@ -9,7 +9,7 @@ public class HealItem : MonoBehaviour
         PlayerStats stats = other.GetComponent<PlayerStats>();
         if (stats == null) return;
 
-        // Heal and clamp
+        // Heal
         stats.currentHealth = Mathf.Min(stats.currentHealth + healAmount, stats.maxHealth);
 
         // Save new value so BattleSetup loads it correctly
