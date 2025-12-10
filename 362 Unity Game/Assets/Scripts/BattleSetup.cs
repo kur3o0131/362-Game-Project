@@ -4,46 +4,50 @@ public class BattleSetup : MonoBehaviour
 {
     [Header("Prefabs")]
     public GameObject playerPrefab;
-    public GameObject enemyPrefab;
+    public GameObject npcPrefab;        // optional companion
+    public GameObject enemyPrefab;      // set by overworld collision
 
-    [Header("Extra Testing")]
-    public bool spawnExtraPlayerForTest = true;
-    public Vector3 firstPlayerPosition = new Vector3(-4f, 0f, 0f);
-    public Vector3 extraPlayerOffset = new Vector3(1.75f, 0f, 0f);
+    [Header("Positions")]
+    public Vector3 playerPosition = new Vector3(-4f, 0f, 0f);
+    public Vector3 npcOffset = new Vector3(1.75f, 0f, 0f);
     public Vector3 enemyPosition = new Vector3(4f, 0f, 0f);
 
     void Start()
     {
         Debug.Log("Setting up battle scene...");
 
-        // Spawn main player (back-compatible with DataTransfer)
-        PlayerStats player = Instantiate(playerPrefab, firstPlayerPosition, Quaternion.identity)
+        // ===== Spawn main player =====
+        PlayerStats player = Instantiate(playerPrefab, playerPosition, Quaternion.identity)
                                 .GetComponent<PlayerStats>();
         player.name = "Player";
         player.maxHealth = DataTransfer.playerMaxHealth > 0 ? DataTransfer.playerMaxHealth : player.maxHealth;
         player.currentHealth = DataTransfer.playerCurrentHealth > 0 ? DataTransfer.playerCurrentHealth : player.maxHealth;
         player.attackPower = DataTransfer.playerAttackPower > 0 ? DataTransfer.playerAttackPower : player.attackPower;
 
-        // Spawn extra test ally
-        if (spawnExtraPlayerForTest)
+        // ===== Spawn NPC companion if assigned =====
+        if (npcPrefab != null)
         {
-            Vector3 allyPos = firstPlayerPosition + extraPlayerOffset;
-            PlayerStats ally = Instantiate(playerPrefab, allyPos, Quaternion.identity)
-                                    .GetComponent<PlayerStats>();
-            ally.name = "Ally 2";
+            Vector3 npcPosition = playerPosition + npcOffset;
+            PlayerStats npc = Instantiate(npcPrefab, npcPosition, Quaternion.identity)
+                                .GetComponent<PlayerStats>();
+            npc.name = "Companion";
 
-            // Ensure health initialized (in case prefab doesn't set currentHealth yet)
-            if (ally.currentHealth <= 0)
-                ally.currentHealth = ally.maxHealth;
+            if (DataTransfer.companionMaxHealth > 0) npc.maxHealth = DataTransfer.companionMaxHealth;
+            if (DataTransfer.companionCurrentHealth > 0) npc.currentHealth = DataTransfer.companionCurrentHealth;
+            if (DataTransfer.companionAttackPower > 0) npc.attackPower = DataTransfer.companionAttackPower;
         }
 
-        // Spawn enemy (back-compatible with DataTransfer)
-        EnemyStats enemy = Instantiate(enemyPrefab, enemyPosition, Quaternion.identity)
+        // ===== Spawn enemy from overworld trigger =====
+        if (DataTransfer.enemyPrefab != null)
+        {
+            EnemyStats enemy = Instantiate(DataTransfer.enemyPrefab, enemyPosition, Quaternion.identity)
                                 .GetComponent<EnemyStats>();
-        enemy.name = "Enemy";
-        enemy.maxHealth = DataTransfer.enemyMaxHealth > 0 ? DataTransfer.enemyMaxHealth : enemy.maxHealth;
-        enemy.currentHealth = DataTransfer.enemyCurrentHealth > 0 ? DataTransfer.enemyCurrentHealth : enemy.maxHealth;
-        enemy.attackPower = DataTransfer.enemyAttackPower > 0 ? DataTransfer.enemyAttackPower : enemy.attackPower;
+            enemy.name = "Enemy";
+
+            enemy.maxHealth = DataTransfer.enemyMaxHealth > 0 ? DataTransfer.enemyMaxHealth : enemy.maxHealth;
+            enemy.currentHealth = DataTransfer.enemyCurrentHealth > 0 ? DataTransfer.enemyCurrentHealth : enemy.maxHealth;
+            enemy.attackPower = DataTransfer.enemyAttackPower > 0 ? DataTransfer.enemyAttackPower : enemy.attackPower;
+        }
 
         Debug.Log("Battle setup complete!");
     }

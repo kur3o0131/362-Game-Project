@@ -2,6 +2,9 @@ using UnityEngine;
 
 public class EnemyStats : MonoBehaviour
 {
+
+    public GameObject prefabReference;
+
     [Header("Enemy Stats")]
     public int maxHealth = 100;
     public int currentHealth;

@@ -32,7 +32,18 @@ public class PlayerStats : MonoBehaviour
         if (DataTransfer.lastPlayerPosition != Vector3.zero &&
             SceneManager.GetActiveScene().name != "BattleScene")
         {
+            // Move player to the saved safe position
             transform.position = DataTransfer.lastPlayerPosition;
+
+            // Also move NPC near the player (if it exists in this scene)
+            var companion = FindFirstObjectByType<CompanionStats>();
+            if (companion != null)
+            {
+                Vector3 companionOffset = new Vector3(1.5f, 0f, 0f); // to the right of player
+                companion.transform.position = transform.position + companionOffset;
+            }
+
+            // Clear so it doesn't run again next scene load
             DataTransfer.lastPlayerPosition = Vector3.zero;
         }
 
@@ -54,22 +65,49 @@ public class PlayerStats : MonoBehaviour
     {
         if (other.CompareTag("Enemy"))
         {
+            // Save player stats
             DataTransfer.playerMaxHealth = maxHealth;
             DataTransfer.playerCurrentHealth = currentHealth;
             DataTransfer.playerAttackPower = attackPower;
 
+            // Enemy reference
             EnemyStats enemy = other.GetComponent<EnemyStats>();
+            DataTransfer.overworldEnemy = other.gameObject;
+
+            // -------------------------
+            // THE IMPORTANT FIX
+            // -------------------------
+            if (enemy.prefabReference != null)
+            {
+                DataTransfer.enemyPrefab = enemy.prefabReference;
+                Debug.Log("Assigned enemyPrefab: " + DataTransfer.enemyPrefab.name);
+            }
+            else
+            {
+                Debug.LogError("ERROR: prefabReference NOT ASSIGNED on " + other.name);
+            }
+
+            // Save enemy stats
             DataTransfer.enemyMaxHealth = enemy.maxHealth;
             DataTransfer.enemyCurrentHealth = enemy.currentHealth;
             DataTransfer.enemyAttackPower = enemy.attackPower;
 
+            // Save scene info
             DataTransfer.lastSceneName = SceneManager.GetActiveScene().name;
-            Vector3 offset = -((Vector3)other.transform.position - transform.position).normalized * 0.5f;
-            DataTransfer.lastPlayerPosition = transform.position + offset;
 
+            
+            Vector3 dirAway = (transform.position - other.transform.position).normalized;
+            if (dirAway == Vector3.zero)
+                dirAway = Vector3.up; // fallback just in case
+
+            float pushDistance = 2.5f;  // increase if still too close
+            DataTransfer.lastPlayerPosition = transform.position + dirAway * pushDistance;
+
+            // Load battle
             SceneManager.LoadScene("BattleScene");
         }
     }
+
 
     public void TakeDamage(int damage)
     {

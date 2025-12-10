@@ -2439,16 +2439,16 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1715980125}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 174972f3c27d105489ea0f081e30268a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   playerPrefab: {fileID: 5972327761011880844, guid: af6e5cd5bf1bbd34ba49c40a046fb3f7, type: 3}
-  enemyPrefab: {fileID: 105886436136735349, guid: 3d57bee8f308ddb4c893a5d89d45f30c, type: 3}
-  spawnExtraPlayerForTest: 1
-  firstPlayerPosition: {x: -4, y: 0, z: 0}
-  extraPlayerOffset: {x: 1.75, y: 0, z: 0}
+  npcPrefab: {fileID: 6342020867158600214, guid: 885ba32bd2ee7dd42b9c8e2f34c1b1cf, type: 3}
+  enemyPrefab: {fileID: 0}
+  playerPosition: {x: -4, y: 0, z: 0}
+  npcOffset: {x: 1.75, y: 0, z: 0}
   enemyPosition: {x: 4, y: 0, z: 0}
 --- !u!4 &1715980127
 Transform:
@@ -2477,6 +2477,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c302a6148f19d52449efca7e91e07e05, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  playerBattlePosition: {x: -4, y: 0, z: 0}
+  companionBattleOffset: {x: 1.75, y: 0, z: 0}
+  enemyBattlePosition: {x: 4, y: 0, z: 0}
+  playerPrefab: {fileID: 5972327761011880844, guid: af6e5cd5bf1bbd34ba49c40a046fb3f7, type: 3}
+  companionPrefab: {fileID: 6342020867158600214, guid: 885ba32bd2ee7dd42b9c8e2f34c1b1cf, type: 3}
   player: {fileID: 0}
   enemy: {fileID: 0}
   players: []

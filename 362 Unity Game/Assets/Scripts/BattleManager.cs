@@ -7,6 +7,16 @@ using UnityEngine.SceneManagement;
 
 public class BattleManager : MonoBehaviour
 {
+
+    [Header("Spawn Positions")]
+    public Vector3 playerBattlePosition = new Vector3(-4f, 0f, 0f);
+    public Vector3 companionBattleOffset = new Vector3(1.75f, 0f, 0f);
+    public Vector3 enemyBattlePosition = new Vector3(4f, 0f, 0f);
+
+    [Header("Prefabs")]
+    public GameObject playerPrefab;
+    public GameObject companionPrefab;
+
     [Header("Legacy Single References (kept for backward compatibility)")]
     public PlayerStats player;
     public EnemyStats enemy;
@@ -36,84 +46,128 @@ public class BattleManager : MonoBehaviour
     private int playerTurnIndex = 0;
     private int enemyTurnIndex = 0;
 
-    // New: queued actions chosen by players before execution
+    // Player actions
     enum PlayerAction { None, Attack, Defend, Retreat }
     private List<PlayerAction> queuedPlayerActions = new List<PlayerAction>();
     private List<bool> playerDefending = new List<bool>();
-    private int selectionIndex = 0; // which player we're choosing for
+    private int selectionIndex = 0;
 
     void Start()
     {
         Debug.Log("Battle started!");
 
-        // Collect players if list not manually populated in inspector
-        if (players == null || players.Count == 0)
+        players = new List<PlayerStats>();
+        enemies = new List<EnemyStats>();
+
+        // ==========================
+        // SPAWN PLAYER
+        // ==========================
+        if (playerPrefab == null)
         {
-            players = new List<PlayerStats>(FindObjectsByType<PlayerStats>(FindObjectsSortMode.None));
+            Debug.LogError("BattleManager: playerPrefab is NOT assigned in the inspector!");
+            return;
         }
 
-        // Collect enemies if list not manually populated in inspector
-        if (enemies == null || enemies.Count == 0)
+        GameObject playerObj = Instantiate(playerPrefab, playerBattlePosition, Quaternion.identity);
+        PlayerStats pStats = playerObj.GetComponent<PlayerStats>();
+        if (pStats == null)
         {
-            enemies = new List<EnemyStats>(FindObjectsByType<EnemyStats>(FindObjectsSortMode.None));
+            Debug.LogError("BattleManager: playerPrefab has NO PlayerStats component!");
+            return;
         }
 
-        // Maintain legacy references
-        if (player == null && players.Count > 0)
-            player = players[0];
-        if (enemy == null && enemies.Count > 0)
-            enemy = enemies[0];
+        pStats.name = "Player";
+        pStats.maxHealth = DataTransfer.playerMaxHealth > 0 ? DataTransfer.playerMaxHealth : pStats.maxHealth;
+        pStats.currentHealth = DataTransfer.playerCurrentHealth > 0 ? DataTransfer.playerCurrentHealth : pStats.maxHealth;
+        pStats.attackPower = DataTransfer.playerAttackPower > 0 ? DataTransfer.playerAttackPower : pStats.attackPower;
+        players.Add(pStats);
 
-        if (players.Count == 0)
+        // ==========================
+        // SPAWN COMPANION (ALWAYS if prefab assigned)
+        // ==========================
+        if (companionPrefab != null)
         {
-            Debug.LogError("No PlayerStats found in scene for battle!");
-            battleEnded = true;
+            Vector3 compPos = playerBattlePosition + companionBattleOffset;
+            GameObject companionObj = Instantiate(companionPrefab, compPos, Quaternion.identity);
+            PlayerStats cStats = companionObj.GetComponent<PlayerStats>();
+            if (cStats == null)
+            {
+                Debug.LogError("BattleManager: companionPrefab has NO PlayerStats component!");
+            }
+            else
+            {
+                cStats.name = "Companion";
+                cStats.maxHealth = DataTransfer.companionMaxHealth > 0 ? DataTransfer.companionMaxHealth : cStats.maxHealth;
+                cStats.currentHealth = DataTransfer.companionCurrentHealth > 0 ? DataTransfer.companionCurrentHealth : cStats.maxHealth;
+                cStats.attackPower = DataTransfer.companionAttackPower > 0 ? DataTransfer.companionAttackPower : cStats.attackPower;
+                players.Add(cStats);
+            }
         }
-        if (enemies.Count == 0)
+
+        // ==========================
+        // SPAWN ENEMY
+        // ==========================
+        if (DataTransfer.enemyPrefab == null)
         {
-            Debug.LogError("No EnemyStats found in scene for battle!");
-            battleEnded = true;
+            Debug.LogError("BattleManager: DataTransfer.enemyPrefab is NULL. " +
+                           "Did the player collide with an enemy, and is EnemyStats.prefabReference assigned?");
+            return;
         }
+
+        GameObject enemyObj = Instantiate(DataTransfer.enemyPrefab, enemyBattlePosition, Quaternion.identity);
+        if (enemyObj == null)
+        {
+            Debug.LogError("BattleManager: Instantiate returned NULL for enemyPrefab!");
+            return;
+        }
+
+        EnemyStats eStats = enemyObj.GetComponent<EnemyStats>();
+        if (eStats == null)
+        {
+            Debug.LogError("BattleManager: enemy prefab has NO EnemyStats on the root object!");
+            return;
+        }
+
+        eStats.name = "Enemy";
+        eStats.maxHealth = DataTransfer.enemyMaxHealth > 0 ? DataTransfer.enemyMaxHealth : eStats.maxHealth;
+        eStats.currentHealth = DataTransfer.enemyCurrentHealth > 0 ? DataTransfer.enemyCurrentHealth : eStats.maxHealth;
+        eStats.attackPower = DataTransfer.enemyAttackPower > 0 ? DataTransfer.enemyAttackPower : eStats.attackPower;
+        enemies.Add(eStats);
+
+        // Backwards compatibility single refs
+        if (players.Count > 0) player = players[0];
+        if (enemies.Count > 0) enemy = enemies[0];
 
         UpdateUI();
 
         if (attackButton != null)
             attackButton.onClick.AddListener(StartSelectionPhase);
 
-        // Hook selection UI buttons if assigned
         if (selectAttackButton != null) selectAttackButton.onClick.AddListener(() => OnSelectAction(PlayerAction.Attack));
         if (selectDefendButton != null) selectDefendButton.onClick.AddListener(() => OnSelectAction(PlayerAction.Defend));
         if (selectRetreatButton != null) selectRetreatButton.onClick.AddListener(() => OnSelectAction(PlayerAction.Retreat));
         if (selectBackButton != null) selectBackButton.onClick.AddListener(OnSelectBack);
         if (selectConfirmButton != null) selectConfirmButton.onClick.AddListener(OnSelectConfirm);
 
-        // Initialize queued actions/defend list to match players
         queuedPlayerActions = new List<PlayerAction>(new PlayerAction[players.Count]);
-        for (int i = 0; i < players.Count; i++) queuedPlayerActions[i] = PlayerAction.None;
         playerDefending = new List<bool>(new bool[players.Count]);
     }
 
-    // =========================
-    // New selection-phase system
-    // =========================
+    // ==========================
+    // START SELECTION PHASE
+    // ==========================
     void StartSelectionPhase()
     {
         if (!playerSideTurn || battleEnded) return;
 
-        // Fallback: if selection UI not wired, keep legacy single attack
-        if (selectionPanel == null || selectAttackButton == null || selectDefendButton == null || selectRetreatButton == null)
-        {
-            OnAttackButtonPressed();
-            return;
-        }
+        // Reset defend flags
+        for (int i = 0; i < playerDefending.Count; i++)
+            playerDefending[i] = false;
 
-        // Reset any lingering defend flags from previous round
-        for (int i = 0; i < playerDefending.Count; i++) playerDefending[i] = false;
-
-        // Ensure queue size matches current players
+        // Ensure queues match party
         EnsureQueuesMatchParty();
 
-        // Start from first alive player
+        // Start with first alive player
         selectionIndex = GetFirstAlivePlayerIndex();
         if (selectionIndex < 0)
         {
@@ -121,48 +175,42 @@ public class BattleManager : MonoBehaviour
             return;
         }
 
-        if (attackButton != null) attackButton.interactable = false;
+        // Show selection UI
         ShowSelectionUI(true);
         UpdateSelectionPrompt();
         UpdateSelectionButtons();
+
+        if (attackButton != null)
+            attackButton.interactable = false;
     }
 
     void EnsureQueuesMatchParty()
     {
         if (queuedPlayerActions.Count != players.Count)
-        {
             queuedPlayerActions = new List<PlayerAction>(new PlayerAction[players.Count]);
-        }
+
         if (playerDefending.Count != players.Count)
-        {
             playerDefending = new List<bool>(new bool[players.Count]);
-        }
     }
 
     int GetFirstAlivePlayerIndex()
     {
         for (int i = 0; i < players.Count; i++)
-        {
             if (players[i] != null && players[i].currentHealth > 0) return i;
-        }
         return -1;
     }
 
     int GetNextAlivePlayerIndex(int startExclusive)
     {
         for (int i = startExclusive + 1; i < players.Count; i++)
-        {
             if (players[i] != null && players[i].currentHealth > 0) return i;
-        }
         return -1;
     }
 
     int GetPrevAlivePlayerIndex(int startExclusive)
     {
         for (int i = startExclusive - 1; i >= 0; i--)
-        {
             if (players[i] != null && players[i].currentHealth > 0) return i;
-        }
         return -1;
     }
 
@@ -171,6 +219,7 @@ public class BattleManager : MonoBehaviour
         if (battleEnded) return;
         if (selectionIndex < 0 || selectionIndex >= players.Count) return;
         if (players[selectionIndex] == null || players[selectionIndex].currentHealth <= 0) return;
+
         queuedPlayerActions[selectionIndex] = action;
         UpdateSelectionPrompt();
         UpdateSelectionButtons();
@@ -182,7 +231,6 @@ public class BattleManager : MonoBehaviour
         if (selectionIndex < 0) return;
         if (queuedPlayerActions[selectionIndex] == PlayerAction.None) return;
 
-        // Advance to next alive player
         int next = GetNextAlivePlayerIndex(selectionIndex);
         if (next >= 0)
         {
@@ -192,7 +240,6 @@ public class BattleManager : MonoBehaviour
         }
         else
         {
-            // All chosen -> execute the round
             ShowSelectionUI(false);
             StartCoroutine(ExecuteRound());
         }
@@ -212,7 +259,6 @@ public class BattleManager : MonoBehaviour
         }
         else
         {
-            // At first player; stay here. Could optionally exit selection.
             UpdateSelectionPrompt();
             UpdateSelectionButtons();
         }
@@ -227,6 +273,7 @@ public class BattleManager : MonoBehaviour
     void UpdateSelectionPrompt()
     {
         if (selectionPromptText == null) return;
+
         int aliveCountBefore = 0;
         for (int i = 0; i < players.Count; i++)
         {
@@ -236,11 +283,11 @@ public class BattleManager : MonoBehaviour
                 aliveCountBefore++;
             }
         }
+
         int aliveTotal = 0;
         for (int i = 0; i < players.Count; i++)
-        {
             if (players[i] != null && players[i].currentHealth > 0) aliveTotal++;
-        }
+
         var p = players[selectionIndex];
         string current = queuedPlayerActions[selectionIndex].ToString();
         selectionPromptText.text = $"Choose action for {p.name} ({aliveCountBefore + 1}/{aliveTotal}). Current: {current}";
@@ -256,10 +303,10 @@ public class BattleManager : MonoBehaviour
 
     IEnumerator ExecuteRound()
     {
-        playerSideTurn = false; // execution in progress
+        playerSideTurn = false;
         if (attackButton != null) attackButton.interactable = false;
 
-        // Player phase: execute chosen actions in order
+        // Player phase
         for (int i = 0; i < players.Count; i++)
         {
             var p = players[i];
@@ -269,7 +316,6 @@ public class BattleManager : MonoBehaviour
             switch (act)
             {
                 case PlayerAction.Attack:
-                {
                     var target = GetFirstAliveEnemy();
                     if (target != null)
                     {
@@ -285,53 +331,39 @@ public class BattleManager : MonoBehaviour
                         yield break;
                     }
                     break;
-                }
+
                 case PlayerAction.Defend:
-                {
                     if (i < playerDefending.Count) playerDefending[i] = true;
                     LogMessage($"{p.name} is defending!");
                     break;
-                }
+
                 case PlayerAction.Retreat:
-                {
                     LogMessage($"{p.name} initiated a retreat!");
                     EndBattle(false);
                     yield break;
-                }
+
                 case PlayerAction.None:
                 default:
-                {
-                    // If no choice was made (shouldn't happen), default to defend
                     if (i < playerDefending.Count) playerDefending[i] = true;
                     LogMessage($"{p.name} braces for impact.");
                     break;
-                }
             }
             yield return new WaitForSeconds(0.6f);
         }
 
-        // After players acted, check victory
-        if (AreAllEnemiesDefeated()) { EndBattle(true); yield break; }
-
-        // Enemy phase: each alive enemy acts
+        // Enemy phase
         for (int j = 0; j < enemies.Count; j++)
         {
             var e = enemies[j];
             if (e == null || e.currentHealth <= 0) continue;
 
             var target = GetFirstAlivePlayer();
-            if (target == null)
-            {
-                EvaluateVictory();
-                yield break;
-            }
+            if (target == null) { EvaluateVictory(); yield break; }
 
             int targetIndex = players.IndexOf(target);
             int damage = e.attackPower;
             if (targetIndex >= 0 && targetIndex < playerDefending.Count && playerDefending[targetIndex])
-            {
                 damage = Mathf.Max(1, Mathf.RoundToInt(damage * 0.5f));
-            }
 
             target.TakeDamage(damage);
             LogMessage($"{e.name} attacked {target.name} for {damage} damage!");
@@ -340,10 +372,8 @@ public class BattleManager : MonoBehaviour
             yield return new WaitForSeconds(0.6f);
         }
 
-        // Clear defend after enemy phase
         for (int i = 0; i < playerDefending.Count; i++) playerDefending[i] = false;
 
-        // Prepare next round
         for (int i = 0; i < queuedPlayerActions.Count; i++) queuedPlayerActions[i] = PlayerAction.None;
         selectionIndex = 0;
         playerSideTurn = true;
@@ -354,123 +384,35 @@ public class BattleManager : MonoBehaviour
     EnemyStats GetFirstAliveEnemy()
     {
         foreach (var e in enemies)
-        {
             if (e != null && e.currentHealth > 0) return e;
-        }
         return null;
     }
 
     PlayerStats GetFirstAlivePlayer()
     {
         foreach (var p in players)
-        {
             if (p != null && p.currentHealth > 0) return p;
-        }
         return null;
-    }
-
-    void OnAttackButtonPressed()
-    {
-        if (!playerSideTurn || battleEnded) return;
-
-        PlayerStats actingPlayer = GetNextAlivePlayer();
-        EnemyStats targetEnemy = GetNextAliveEnemy();
-
-        if (actingPlayer == null || targetEnemy == null)
-        {
-            EvaluateVictory();
-            return;
-        }
-
-        int damage = actingPlayer.attackPower;
-        targetEnemy.TakeDamage(damage);
-        LogMessage($"{actingPlayer.name} attacked {targetEnemy.name} for {damage} damage!");
-
-        AdvancePlayerIndex();
-        UpdateUI();
-
-        if (AreAllEnemiesDefeated())
-        {
-            EndBattle(true);
-            return;
-        }
-
-        playerSideTurn = false;
-        if (attackButton != null)
-            attackButton.interactable = false;
-
-        Invoke(nameof(EnemyTurn), 1.0f);
-    }
-
-    void EnemyTurn()
-    {
-        if (battleEnded) return;
-
-        EnemyStats actingEnemy = GetNextAliveEnemy();
-        PlayerStats targetPlayer = GetNextAlivePlayer();
-
-        if (actingEnemy == null || targetPlayer == null)
-        {
-            EvaluateVictory();
-            return;
-        }
-
-        int damage = actingEnemy.attackPower;
-        targetPlayer.TakeDamage(damage);
-        LogMessage($"{actingEnemy.name} attacked {targetPlayer.name} for {damage} damage!");
-
-        AdvanceEnemyIndex();
-        UpdateUI();
-
-        if (AreAllPlayersDefeated())
-        {
-            EndBattle(false);
-            return;
-        }
-
-        playerSideTurn = true;
-        if (attackButton != null)
-            attackButton.interactable = true;
     }
 
     void UpdateUI()
     {
         if (playerHPText != null)
         {
-            if (players.Count <= 1 && player != null)
-            {
-                playerHPText.text = $"Player HP: {player.currentHealth}/{player.maxHealth}";
-            }
-            else
-            {
-                System.Text.StringBuilder sb = new System.Text.StringBuilder();
-                sb.AppendLine("Players:");
-                foreach (var p in players)
-                {
-                    if (p == null) continue;
-                    sb.AppendLine($"{p.name}: {p.currentHealth}/{p.maxHealth}");
-                }
-                playerHPText.text = sb.ToString().TrimEnd();
-            }
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            sb.AppendLine("Players:");
+            foreach (var p in players)
+                if (p != null) sb.AppendLine($"{p.name}: {p.currentHealth}/{p.maxHealth}");
+            playerHPText.text = sb.ToString().TrimEnd();
         }
 
         if (enemyHPText != null)
         {
-            if (enemies.Count <= 1 && enemy != null)
-            {
-                enemyHPText.text = $"Enemy HP: {enemy.currentHealth}/{enemy.maxHealth}";
-            }
-            else
-            {
-                System.Text.StringBuilder sb = new System.Text.StringBuilder();
-                sb.AppendLine("Enemies:");
-                foreach (var e in enemies)
-                {
-                    if (e == null) continue;
-                    sb.AppendLine($"{e.name}: {e.currentHealth}/{e.maxHealth}");
-                }
-                enemyHPText.text = sb.ToString().TrimEnd();
-            }
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            sb.AppendLine("Enemies:");
+            foreach (var e in enemies)
+                if (e != null) sb.AppendLine($"{e.name}: {e.currentHealth}/{e.maxHealth}");
+            enemyHPText.text = sb.ToString().TrimEnd();
         }
     }
 
@@ -482,7 +424,6 @@ public class BattleManager : MonoBehaviour
         if (attackButton != null)
             attackButton.interactable = false;
 
-        // Hide selection UI if visible
         ShowSelectionUI(false);
 
         if (player != null)
@@ -495,7 +436,11 @@ public class BattleManager : MonoBehaviour
             DataTransfer.enemyCurrentHealth = enemy.currentHealth;
             DataTransfer.enemyMaxHealth = enemy.maxHealth;
         }
-
+        if (playerWon && DataTransfer.overworldEnemy != null)
+        {
+            Destroy(DataTransfer.overworldEnemy);
+            DataTransfer.overworldEnemy = null;
+        }
         Invoke(nameof(ReturnToWorld), 2.5f);
     }
 
@@ -514,89 +459,21 @@ public class BattleManager : MonoBehaviour
             battleLogText.text = msg;
     }
 
-    public void OnRetreatButtonPressed()
+    void EvaluateVictory()
     {
-        if (battleEnded) return;
-
-        LogMessage("You retreated from battle!");
-        EndBattle(false);
-    }
-
-    PlayerStats GetNextAlivePlayer()
-    {
-        if (players == null || players.Count == 0) return player;
-        int attempts = players.Count;
-        int idx = playerTurnIndex;
-        while (attempts-- > 0)
-        {
-            var p = players[idx];
-            if (p != null && p.currentHealth > 0)
-            {
-                playerTurnIndex = idx;
-                return p;
-            }
-            idx = (idx + 1) % players.Count;
-        }
-        return null;
-    }
-
-    EnemyStats GetNextAliveEnemy()
-    {
-        if (enemies == null || enemies.Count == 0) return enemy;
-        int attempts = enemies.Count;
-        int idx = enemyTurnIndex;
-        while (attempts-- > 0)
-        {
-            var e = enemies[idx];
-            if (e != null && e.currentHealth > 0)
-            {
-                enemyTurnIndex = idx;
-                return e;
-            }
-            idx = (idx + 1) % enemies.Count;
-        }
-        return null;
-    }
-
-    void AdvancePlayerIndex()
-    {
-        if (players == null || players.Count == 0) return;
-        playerTurnIndex = (playerTurnIndex + 1) % players.Count;
-    }
-
-    void AdvanceEnemyIndex()
-    {
-        if (enemies == null || enemies.Count == 0) return;
-        enemyTurnIndex = (enemyTurnIndex + 1) % enemies.Count;
+        if (AreAllEnemiesDefeated()) EndBattle(true);
+        else if (AreAllPlayersDefeated()) EndBattle(false);
     }
 
     bool AreAllEnemiesDefeated()
     {
-        foreach (var e in enemies)
-        {
-            if (e != null && e.currentHealth > 0) return false;
-        }
+        foreach (var e in enemies) if (e != null && e.currentHealth > 0) return false;
         return true;
     }
 
     bool AreAllPlayersDefeated()
     {
-        foreach (var p in players)
-        {
-            if (p != null && p.currentHealth > 0) return false;
-        }
+        foreach (var p in players) if (p != null && p.currentHealth > 0) return false;
         return true;
-    }
-
-    void EvaluateVictory()
-    {
-        if (AreAllEnemiesDefeated())
-        {
-            EndBattle(true);
-        }
-        else if (AreAllPlayersDefeated())
-        {
-            EndBattle(false);
-        }
     }
 }
