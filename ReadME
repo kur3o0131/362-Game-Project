@@ -1,0 +1,17 @@
+Game Overview
+This project is a 2D top-down, turn-based RPG built in Unity. You explore an overworld (starting in the Town scene) and encounter enemies. When the player collides with an enemy, the game transitions into a separate BattleScene, where combat plays out using a turn-based system with a player party and a companion.
+
+Core Features
+
+Basic Movement Around the map using WASD
+
+Interact with NPC using Z
+Interact with items with contact
+
+Top-down overworld exploration – Move around and initiating battles by touching enemies.
+
+Turn-based combat system – In battle, each living party member chooses an action (Attack, Defend, or Retreat), then players and enemies take turns resolving their moves.
+
+Party and companion – Fight alongside a companion with their own stats, providing extra damage and tactical options.
+
+Simple main menu – Start a new session directly into the town, or quit the application from the main menu.
